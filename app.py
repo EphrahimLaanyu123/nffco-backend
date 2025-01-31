@@ -1,17 +1,26 @@
-from flask import Flask
+import os
+from flask import Flask, request, jsonify
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Api, Resource, reqparse
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
 from models import db, Article, SuggestedArticle
+import base64  # For encoding image data to base64
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///nfcco.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = '/uploads/images'
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Max file size 16MB
 
 # Initialize extensions
 db.init_app(app)
 migrate = Migrate(app, db)
 api = Api(app)
+CORS(app, origins=["http://localhost:5173","https://nffco-backend.onrender.com"])  # Allow requests from the React app
 
 @app.after_request
 def add_cors_headers(response):
@@ -20,40 +29,66 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
 
-# Suggested Article Resource
-class SuggestedArticleResource(Resource):
-    def get(self):
-        suggestions = SuggestedArticle.query.all()
-        return [
-            {
-                "id": suggestion.id,
-                "title": suggestion.title,
-                "content": suggestion.content,
-                "author_name": suggestion.author_name,
-                "image_url": suggestion.image_url,
-                "suggested_at": suggestion.suggested_at.strftime('%Y-%m-%d %H:%M:%S')
-            } for suggestion in suggestions
-        ]
+# Utility function to check if file extension is allowed
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+class SuggestedArticleResource(Resource):
     def post(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('title', required=True, help="Title cannot be blank")
-        parser.add_argument('content', required=True, help="Content cannot be blank")
-        parser.add_argument('author_name', required=True, help="Author name cannot be blank")
-        parser.add_argument('image_url', required=False)
-        parser.add_argument('category', required=False)
-        data = parser.parse_args()
+        image_data = None  # Initialize image_data
+
+        if 'image_url' in request.files:
+            file = request.files['image_url']
+            if file and allowed_file(file.filename):
+                try:
+                    image_data = file.read()  # Read the file data as bytes
+                except Exception as e:
+                    print(f"Error reading image file: {e}")
+                    return {"message": "Error processing image"}, 500
+            else:
+                return {"message": "Invalid image format"}, 400
+
+        title = request.form.get('title')
+        content = request.form.get('content')
+        author_name = request.form.get('author_name')
+
+        if not title or not content or not author_name:
+            return {"message": "Title, content, and author_name are required"}, 400
 
         new_suggestion = SuggestedArticle(
-            title=data['title'],
-            content=data['content'],
-            author_name=data['author_name'],
-            image_url=data.get('image_url'),
+            title=title,
+            content=content,
+            author_name=author_name,
+            image_data=image_data,  # Store the image data
         )
-        db.session.add(new_suggestion)
-        db.session.commit()
-        return {"message": "Suggested article submitted successfully"}, 201
 
+        try:
+            db.session.add(new_suggestion)
+            db.session.commit()
+            return {"message": "Suggested article submitted successfully"}, 201
+        except Exception as e:
+            db.session.rollback()
+            print(f"Database error: {e}")
+            return {"message": "An error occurred while submitting the article"}, 500
+
+    def get(self):
+        suggested_articles = SuggestedArticle.query.all()
+        articles_list = []
+        for article in suggested_articles:
+            image_base64 = None
+            if article.image_data:
+                image_base64 = base64.b64encode(article.image_data).decode('utf-8')
+
+            articles_list.append({
+                'id': article.id,
+                'title': article.title,
+                'content': article.content,
+                'author_name': article.author_name,
+                'image_data': image_base64,  # Send base64 encoded image data
+            })
+        return {'suggested_articles': articles_list}, 200
+    
+    
 
 # Admin Approval Resource
 class AdminApprovalResource(Resource):
@@ -70,7 +105,7 @@ class AdminApprovalResource(Resource):
                 title=suggestion.title,
                 content=suggestion.content,
                 author_name=suggestion.author_name,
-                image_url=suggestion.image_url,  # Ensure this field is passed correctly
+                image_data=suggestion.image_data,  # Ensure this field is passed correctly
                 approved=True  # Set approved to True
             )
             db.session.add(new_article)
@@ -83,36 +118,30 @@ class AdminApprovalResource(Resource):
             db.session.commit()
             return {"message": "Article suggestion rejected"}, 200
 
-from flask_restful import Resource
-from models import Article
-
+# Approved Articles Resource
 class ApprovedArticlesResource(Resource):
     def get(self):
-        # Query the database for articles where approved is True
         approved_articles = Article.query.filter_by(approved=True).all()
-        
-        # Convert the articles to a list of dictionaries
+
         articles_list = [
             {
                 'id': article.id,
                 'title': article.title,
                 'content': article.content,
                 'author_name': article.author_name,
-                'image_url': article.image_url,
-                'created_at': article.created_at.strftime('%Y-%m-%d %H:%M:%S'),  # Convert datetime to string
+                'image_data': article.image_data,
+                'created_at': article.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'approved': article.approved
             }
             for article in approved_articles
         ]
-        
-        return {'approved_articles': articles_list}, 200
 
+        return {'approved_articles': articles_list}, 200
 
 # Register Resources
 api.add_resource(SuggestedArticleResource, '/suggested_articles')
 api.add_resource(AdminApprovalResource, '/admin/approval/<int:suggestion_id>')
 api.add_resource(ApprovedArticlesResource, '/articles/approved')
-
 
 if __name__ == '__main__':
     app.run(debug=True)
