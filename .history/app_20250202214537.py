@@ -119,6 +119,10 @@ class AdminApprovalResource(Resource):
             return {"message": "Article suggestion rejected"}, 200
 
 # Approved Articles Resource
+import base64
+from flask_restful import Resource
+from models import Article  # Assuming Article is your model
+
 class ApprovedArticlesResource(Resource):
     def get(self):
         approved_articles = Article.query.filter_by(approved=True).all()

@@ -129,7 +129,7 @@ class ApprovedArticlesResource(Resource):
                 'title': article.title,
                 'content': article.content,
                 'author_name': article.author_name,
-                'image_data': base64.b64encode(article.image_data).decode('utf-8') if article.image_data else None,
+                'image_data': article.image_data,
                 'created_at': article.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'approved': article.approved
             }
