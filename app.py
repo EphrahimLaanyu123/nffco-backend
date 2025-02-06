@@ -117,9 +117,17 @@ class AdminApprovalResource(Resource):
             return {"message": "Article approved and published"}, 201
 
         elif data['action'] == 'reject':
-            db.session.delete(suggestion)  # Just delete the suggestion if rejected
-            db.session.commit()
-            return {"message": "Article suggestion rejected"}, 200
+            try:
+                db.session.delete(suggestion)  # Delete the suggestion if rejected
+                db.session.commit()
+                return {"message": f"Suggested article with ID {suggestion_id} rejected and deleted"}, 200
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error rejecting and deleting article: {e}")
+                return {"message": "An error occurred while rejecting the suggestion"}, 500
+api.add_resource(AdminApprovalResource, '/admin/approval/<int:suggestion_id>')
+
+
 
 # Approved Articles Resource
 class ApprovedArticlesResource(Resource):
@@ -167,7 +175,6 @@ api.add_resource(ApprovedArticleResource, '/articles/<int:article_id>')
 
 # Register Resources
 api.add_resource(SuggestedArticleResource, '/suggested_articles')
-api.add_resource(AdminApprovalResource, '/admin/approval/<int:suggestion_id>')
 api.add_resource(ApprovedArticlesResource, '/articles/approved')
 
 
