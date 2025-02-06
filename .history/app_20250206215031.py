@@ -93,6 +93,7 @@ class SuggestedArticleResource(Resource):
     
     
 
+# Admin Approval Resource
 class AdminApprovalResource(Resource):
     def post(self, suggestion_id):
         parser = reqparse.RequestParser()
@@ -116,15 +117,9 @@ class AdminApprovalResource(Resource):
             return {"message": "Article approved and published"}, 201
 
         elif data['action'] == 'reject':
-            try:
-                db.session.delete(suggestion)  # Delete the suggestion if rejected
-                db.session.commit()
-                return {"message": f"Suggested article with ID {suggestion_id} rejected and deleted"}, 200
-            except Exception as e:
-                db.session.rollback()
-                print(f"Error rejecting and deleting article: {e}")
-                return {"message": "An error occurred while rejecting the suggestion"}, 500
-
+            db.session.delete(suggestion)  # Just delete the suggestion if rejected
+            db.session.commit()
+            return {"message": "Article suggestion rejected"}, 200
 
 # Approved Articles Resource
 class ApprovedArticlesResource(Resource):
@@ -177,4 +172,4 @@ api.add_resource(ApprovedArticlesResource, '/articles/approved')
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True) make this to be such that when a suggested article is rejected, it is deleted

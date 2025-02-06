@@ -177,4 +177,4 @@ api.add_resource(ApprovedArticlesResource, '/articles/approved')
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True) make this to be such that when a suggested article is rejected, it is deleted
