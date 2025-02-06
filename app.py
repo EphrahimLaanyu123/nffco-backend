@@ -7,6 +7,9 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from models import db, Article, SuggestedArticle
 import base64  # For encoding image data to base64
+from flask_restful import Resource, abort
+from flask import make_response
+from sqlalchemy.orm.exc import NoResultFound
 
 
 app = Flask(__name__)
@@ -137,11 +140,36 @@ class ApprovedArticlesResource(Resource):
         ]
 
         return {'approved_articles': articles_list}, 200
+    
+
+    
+class ApprovedArticleResource(Resource):
+    def delete(self, article_id):
+        try:
+            article = Article.query.filter_by(id=article_id, approved=True).one_or_none()  # Check for approved articles
+
+            if article is None:
+                abort(404, message=f"Approved article with ID {article_id} not found.")  # 404 if not found or not approved
+
+            db.session.delete(article)
+            db.session.commit()
+
+            return make_response('', 204)  # 204 No Content (successful delete)
+
+        except NoResultFound:  # Explicitly catch NoResultFound
+            abort(404, message=f"Approved article with ID {article_id} not found.")
+        except Exception as e:
+            db.session.rollback()  # Rollback on error
+            print(f"Error deleting article: {e}")
+            abort(500, message="An error occurred while deleting the article.") # 500 for internal server error
+
+api.add_resource(ApprovedArticleResource, '/articles/<int:article_id>')
 
 # Register Resources
 api.add_resource(SuggestedArticleResource, '/suggested_articles')
 api.add_resource(AdminApprovalResource, '/admin/approval/<int:suggestion_id>')
 api.add_resource(ApprovedArticlesResource, '/articles/approved')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
