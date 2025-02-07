@@ -23,15 +23,13 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Max file size 16MB
 db.init_app(app)
 migrate = Migrate(app, db)
 api = Api(app)
-CORS(app, origins=["http://localhost:5173","https://nffco-backend.onrender.com"])  # Allow requests from the React app
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5173"]}})
 
 @app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+def after_request(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
     return response
-
 # Utility function to check if file extension is allowed
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
@@ -145,6 +143,8 @@ class ApprovedArticlesResource(Resource):
         ]
 
         return {'approved_articles': articles_list}, 200
+api.add_resource(ApprovedArticlesResource, '/articles/approved')
+
     
 
     
@@ -173,7 +173,6 @@ api.add_resource(ApprovedArticleResource, '/articles/<int:article_id>')
 # Register Resources
 api.add_resource(SuggestedArticleResource, '/suggested_articles')
 api.add_resource(AdminApprovalResource, '/admin/approval/<int:suggestion_id>')
-api.add_resource(ApprovedArticlesResource, '/articles/approved')
 
 
 if __name__ == '__main__':
